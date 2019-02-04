@@ -240,8 +240,8 @@ void iteration_loop()
 		}
 
 		//validation end
-		cout << endl << it << " " << ERR(it, 1) << " " << ERR(it, 2);
-
+		//cout << endl << it << " " << ERR(it, 1) << " " << ERR(it, 2);
+		cout << '|';
 		
 		for (i = back_range; i < train_size - fwd_range; i++)
 		{
@@ -269,15 +269,15 @@ void iteration_loop()
 			bias_12(k) = bias_12(k) - learning_rate * beta_12(k);
 		}
 	}
-	cout << endl << it;
+	cout << endl << it <<endl;
 	weight_01.print("w01");
 	bias_01.print("b01");
 	weight_12.print("w12");
 	bias_12.print("b12");
 	//ERR.save(out_obj_fn, arma::raw_ascii);
-	out_obj_fn << "i,err,val_err";
+	out_obj_fn << "iteration,log_err,log_validation_err";
 	for (it = 0; it < iteration_max_number; it++)
-		out_obj_fn << endl << ERR(it,0) << "," << ERR(it,1) << "," << ERR(it,2);
+		out_obj_fn << endl << ERR(it,0) << "," << log(ERR(it,1) ) << "," << log(ERR(it,2));
 	out_obj_fn.close();
 }
 //	
@@ -286,7 +286,7 @@ int main(int argc, char **argv)
 	cout << "Reading input files: ";
 	read_input_files(argv[1]);	
 	iteration_loop();
-	
+	system("python view.py");
 //
 	return 0;
 }

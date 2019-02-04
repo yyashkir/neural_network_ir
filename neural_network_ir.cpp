@@ -275,9 +275,9 @@ void iteration_loop()
 	weight_12.print("w12");
 	bias_12.print("b12");
 	//ERR.save(out_obj_fn, arma::raw_ascii);
-	out_obj_fn << "iteration,log_err,log_validation_err";
+	out_obj_fn << "iteration,err,validation_err";
 	for (it = 0; it < iteration_max_number; it++)
-		out_obj_fn << endl << ERR(it,0) << "," << log(ERR(it,1) ) << "," << log(ERR(it,2));
+		out_obj_fn << endl << ERR(it,0) << "," << ERR(it,1) << "," << ERR(it,2);
 	out_obj_fn.close();
 }
 //	

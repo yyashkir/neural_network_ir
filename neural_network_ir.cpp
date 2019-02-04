@@ -180,7 +180,8 @@ void iteration_loop()
 			for (k = 0; k < kmax; k++)
 			{
 				x(k) = train_dataset(i, k);
-				y(k) = train_dataset(i+1, k);
+				//y(k) = train_dataset(i+1, k);
+				y(k) = train_dataset(i + fwd_range, k);
 			}
 			z_01 = x * weight_01 + bias_01;
 			for (k = 0; k < kmax; k++)
@@ -221,7 +222,8 @@ void iteration_loop()
 			for (k = 0; k < kmax; k++)
 			{
 				x(k) = validation_dataset(i, k);
-				y(k) = validation_dataset(i + 1, k);
+				//y(k) = validation_dataset(i + 1, k);
+				y(k) = validation_dataset(i + fwd_range, k);
 			}
 			z_01 = x * weight_01 + bias_01;
 			for (k = 0; k < kmax; k++)
@@ -272,7 +274,10 @@ void iteration_loop()
 	bias_01.print("b01");
 	weight_12.print("w12");
 	bias_12.print("b12");
-	ERR.save(out_obj_fn, arma::raw_ascii);
+	//ERR.save(out_obj_fn, arma::raw_ascii);
+	out_obj_fn << "i,err,val_err";
+	for (it = 0; it < iteration_max_number; it++)
+		out_obj_fn << endl << ERR(it,0) << "," << ERR(it,1) << "," << ERR(it,2);
 	out_obj_fn.close();
 }
 //	

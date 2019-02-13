@@ -39,7 +39,7 @@ int	back_range;		// number of time steps back for training with historical data
 int	fwd_range;		// number of time steps forward for prediction
 int  iteration_max_number;
 double learning_rate;
-
+int ny;
 clock_t start;
 
 // reading data from input files:
@@ -63,21 +63,24 @@ void  read_input_files(char *argv)
 		>> s >> back_range >>	fwd_range 
 		>> s >> iteration_max_number
 		>> s >> learning_rate
+		>> s >> ny
 		;
 	infile.close();
 //
 	//reading historical rates 
 	ifstream data_stream(historical_datafile.c_str());
-	data_stream >> kmax;
+	data_stream >> kmax;		// number of tenors (=columns)
 	tenors.set_size(kmax);
-	data_stream >> i_hist;	// number of lines in file with historical yields
+	data_stream >> i_hist;		// number of lines in file with historical yields
 	for (k = 0; k < kmax; k++)
 		data_stream >> tenors(k);
 //
 	historical_dataset.set_size(i_hist, kmax);
 	for (i = 0; i < i_hist; i++)
 		for (k = 0; k < kmax; k++)
+		{
 			data_stream >> historical_dataset(i, k);
+		}
 	data_stream.close();
 	cout << "\nHistorical_dataset number of rows: "<< historical_dataset.n_rows <<endl;
 //
@@ -96,6 +99,7 @@ void  read_input_files(char *argv)
 	stringstream st, sv;
 	st << "Training set: " << train_dataset.n_rows << " rows";
 	sv << "Validation set: " << validation_dataset.n_rows << " rows";
+	cout<<endl<<st.str() <<endl<<sv.str()<<endl;
 	/*train_dataset.print(st.str());
 	validation_dataset.print(sv.str());*/
 }
@@ -106,11 +110,15 @@ void iteration_loop()
 	int i, j;
 	int k, p;
 	double sum;
+	int it_min = -10;
 	ofstream out_obj_fn;
 	out_obj_fn.open("err.csv");
 	arma::Mat <double> ERR;
 	ERR.set_size(iteration_max_number,3);
 	ERR.fill(0);
+	ofstream a2y;
+	a2y.open("a2y.csv");
+	a2y << "y,a";
 	arma::Row <double> x;	//input (hist)
 	arma::Row <double> y;	//output (hist)
 	arma::Mat <double> weight_01;	//weights before hidden layer
@@ -122,8 +130,8 @@ void iteration_loop()
 	arma::Row <double> z_12;	// input to output layer
 	arma::Row <double> a_1;	// output of hidden layer
 	arma::Row <double> a_2;	// output of output layer
-	arma::Mat <double> a_1all;	// output of hidden layer
-	arma::Mat <double> a_2all;	// output of output layer
+	arma::Mat <double> a_1all;	// output of hidden layer for ech sample
+	arma::Mat <double> a_2all;	// output of output layer for each sample
 //
 	weight_01.set_size(kmax,kmax);
 	bias_01.set_size(kmax);
@@ -152,6 +160,7 @@ void iteration_loop()
 	w_d01.set_size(kmax, kmax);
 	w_d12.set_size(kmax, kmax);
 //
+	// random fill of all weights and biases:
 	for (k = 0; k < kmax; k++)
 	{
 		bias_01(k) = arma::randn();
@@ -162,11 +171,12 @@ void iteration_loop()
 			weight_12(k, p) = arma::randn();
 		}
 	}
-	weight_01.print("weight_01");
-	bias_01.print("bias_01");
+	/*weight_01.print("weight_01");
+	bias_01.print("bias_01");*/
 	x.set_size(kmax);
 	y.set_size(kmax);
-//main iteration loop starts here
+	int flag = 0;
+//main iteration loop starts here:
 	for (it = 0; it < iteration_max_number; it++)
 	{
 		beta_01.fill(0);
@@ -179,88 +189,117 @@ void iteration_loop()
 		// forward propagation through neural network
 			for (k = 0; k < kmax; k++)
 			{
-				x(k) = train_dataset(i, k);
-				//y(k) = train_dataset(i+1, k);
-				y(k) = train_dataset(i + fwd_range, k);
+				x(k) = train_dataset(i, k);				//rates at date 'i' for tenor number 'k' (input)
+				y(k) = train_dataset(i + fwd_range, k);	//rates at date 'i+fwd_range' for tenor number 'k' (output)
 			}
-			z_01 = x * weight_01 + bias_01;
+			z_01 = x * weight_01 + bias_01;	//vector of weighted averages entering hidden layer '1'
 			for (k = 0; k < kmax; k++)
 			{
-				a_1(k) = sigmoid(z_01(k));
-				a_1all(i, k) = a_1(k);
+				a_1(k) = sigmoid(z_01(k));	//output of neuron 'k' of hidden layer
+				a_1all(i, k) = a_1(k);		//memorizing it for i-th sample
 			}
-			z_12 = a_1 * weight_12 + bias_12;
+			z_12 = a_1 * weight_12 + bias_12;//vector of weighted averages entering output layer '2'
 			for (k = 0; k < kmax; k++)
 			{
-				a_2(k) = sigmoid(z_12(k));
-				a_2all(i, k) = a_2(k);
-				ERR(it,1) = ERR(it,1) + pow(a_2(k) - y(k), 2) / train_size;
+				a_2(k) = sigmoid(z_12(k));	//output of neuron 'k' of output layer
+				a_2all(i, k) = a_2(k);		//memorizing it for i-th sample
+				ERR(it,1) = ERR(it,1) + pow(a_2(k) - y(k), 2) / train_size;	//accumulation of errors
 			}
+
 		// backward propagation:
 			//at output layer:
 			for (k = 0; k < kmax; k++)
-				delta_12(i, k) = (a_2(k) - y(k)) * sigmoid_d(z_12(k));
+				delta_12(i, k) = (a_2(k) - y(k)) * sigmoid_d(z_12(k));// derivative by z(k) at output layer 2, for all sample 'i' for node 'k'
 			//at hidden layer:
 			for (k = 0; k < kmax; k++)
 			{
 				sum = 0;
 				for(j=0; j<kmax;j++)
 					sum = sum + delta_12(i,j) * weight_12(k,j) * sigmoid_d(z_12(k));
-				delta_01(i, k) = sum;
+				delta_01(i, k) = sum;	//derivative by z(k) at hidden layer for sample 'i'
 			}
+			// accumulation of derivatives by biases (getting in the end average by all samples)
 			for (k = 0; k < kmax; k++)
 			{
 				beta_12(k) = beta_12(k) + delta_12(i,k) / train_size;
 				beta_01(k) = beta_01(k) + delta_01(i,k) / train_size;
 			}
-		}
+		}	//single iteration forward/back propagation & derivatives calculation ends here
 
-		//validation start
+		//validation starts here:
 		for (i = 0; i < validation_size - fwd_range; i++)
 		{
 			// forward propagation through neural network
 			for (k = 0; k < kmax; k++)
 			{
-				x(k) = validation_dataset(i, k);
-				//y(k) = validation_dataset(i + 1, k);
-				y(k) = validation_dataset(i + fwd_range, k);
+				x(k) = validation_dataset(i, k);				//input
+				y(k) = validation_dataset(i + fwd_range, k);	//output
 			}
-			z_01 = x * weight_01 + bias_01;
+			z_01 = x * weight_01 + bias_01;		// weighted average for entry to hidden layer '1'
 			for (k = 0; k < kmax; k++)
 			{
-				a_1(k) = sigmoid(z_01(k));
+				a_1(k) = sigmoid(z_01(k));		//out of hidden layer '1'
 			}
-			z_12 = a_1 * weight_12 + bias_12;
+			z_12 = a_1 * weight_12 + bias_12;	// weighted average for entry to output layer '2'
 			for (k = 0; k < kmax; k++)
 			{
-				a_2(k) = sigmoid(z_12(k));
-				ERR(it, 2) = ERR(it, 2) + pow(a_2(k) - y(k), 2) / validation_size;
+				a_2(k) = sigmoid(z_12(k));		// out of output layer '2'
+				ERR(it, 2) = ERR(it, 2) + pow(a_2(k) - y(k), 2) / validation_size;	//error accumulation
 			}
+			if(it == it_min + 2)
+			a2y << endl << y(ny) << "," << a_2(ny);
+		}	//validation end
+		if (it > 1 && ERR(it - 2, 2) >= ERR(it - 1, 2) && ERR(it - 1, 2) <= ERR(it, 2) || it== iteration_max_number - 1)
+		{
 			
+			it_min = it - 1;
+			cout << endl << it-1 << " " << ERR(it - 1, 2)<<" (minimal validation error)"; 
+			//illustration
+			i = 0;
+			// prediction example:
+			for (k = 0; k < kmax; k++)
+			{
+				x(k) = validation_dataset(i, k);				//input
+				y(k) = validation_dataset(i + fwd_range, k);	//output
+			}
+			z_01 = x * weight_01 + bias_01;		// weighted average for entry to hidden layer '1'
+			for (k = 0; k < kmax; k++)
+			{
+				a_1(k) = sigmoid(z_01(k));		//out of hidden layer '1'
+			}
+			z_12 = a_1 * weight_12 + bias_12;	// weighted average for entry to output layer '2'
+			for (k = 0; k < kmax; k++)
+			{
+				a_2(k) = sigmoid(z_12(k));		// out of output layer '2'
+			}
+			y.print("\ny for validation set i=0");
+			a_2.print("a_2 modelled");
+			cout << endl << "optimal weights and biases:";
+			weight_01.print("\nw01");	weight_01.save("weight_01.opt", arma::raw_ascii);
+			bias_01.print("b01");		bias_01.save("bias_01.opt", arma::raw_ascii);
+			weight_12.print("w12");		weight_12.save("weight_12.opt", arma::raw_ascii);
+			bias_12.print("b12");		bias_12.save("bias_12.opt", arma::raw_ascii);
 		}
-
-		//validation end
-		//cout << endl << it << " " << ERR(it, 1) << " " << ERR(it, 2);
-		cout << '|';
-		
+//
+		cout << '.';
+//
+		// derivatives by weights calculation:
 		for (i = back_range; i < train_size - fwd_range; i++)
 		{
 			for (k = 0; k < kmax; k++)
 			{
 				for (j = 0; j < kmax; j++)
 				{
-				//	cout << endl <<i<<" "<< w_d01(k, j) << " " << delta_01(i, j) << " " << a_1all(i, k);
 					w_d01(k, j) = w_d01(k, j) + delta_01(i, j) * a_1all(i, k) / train_size;
 					w_d12(k, j) = w_d12(k, j) + delta_12(i, j) * a_2all(i, k) / train_size;
 				}
 			}
 		}
-		//correction:
+		//gradient downhill step:
 		for (k = 0; k < kmax; k++)
 		{
 			for (j = 0; j < kmax; j++)
 			{
-				//cout << endl << k << " " << j << " " << weight_01(k, j) << " " << w_d01(k, j);
 				weight_01(k, j) = weight_01(k, j) - learning_rate * w_d01(k, j);
 				weight_12(k, j) = weight_12(k, j) - learning_rate * w_d12(k, j);
 
@@ -268,17 +307,30 @@ void iteration_loop()
 			bias_01(k) = bias_01(k) - learning_rate * beta_01(k);
 			bias_12(k) = bias_12(k) - learning_rate * beta_12(k);
 		}
-	}
-	cout << endl << it <<endl;
-	weight_01.print("w01");
-	bias_01.print("b01");
-	weight_12.print("w12");
-	bias_12.print("b12");
+	}	//iteration loop end
+	
+	
+	double min_val_err = 1e12;
+	for (it = 1; it < iteration_max_number; it++)
+		if (ERR(it, 2) < min_val_err)
+		{
+			it_min = it;
+			min_val_err = ERR(it, 2);
+		}
+	cout << endl << "val err is min for it=" << it_min;
+	cout << endl << it <<" iterations completed"<<endl;
+	
 	//ERR.save(out_obj_fn, arma::raw_ascii);
+//	error vs iterations saving to a file:
 	out_obj_fn << "iteration,err,validation_err";
 	for (it = 0; it < iteration_max_number; it++)
 		out_obj_fn << endl << ERR(it,0) << "," << ERR(it,1) << "," << ERR(it,2);
 	out_obj_fn.close();
+//
+	a2y.close();
+
+	
+	
 }
 //	
 int main(int argc, char **argv)
@@ -286,7 +338,10 @@ int main(int argc, char **argv)
 	cout << "Reading input files: ";
 	read_input_files(argv[1]);	
 	iteration_loop();
+//
+	// errors vs iteration: python code call
 	system("python view.py");
+	system("python a2y.py");
 //
 	return 0;
 }

@@ -203,7 +203,7 @@ double percentile_col(arma::Mat<double> U, double confidence, int col)
 	return w;
 }
 //
-double max(double a, double b)
+double maxim(double a, double b)
 {
 	if (a >= b)return a;
 	else return b;

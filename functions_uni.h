@@ -13,7 +13,7 @@ double interpolation(arma::Mat<double> y0, int n, int rank, double t);
 void plot1graph(string out_file, int col_x, int col_y, string xlabel, string ylabel, int show_graph, int logscale);
 void plot2graphs(string out_file, int col_x, int col_y1, int col_y2, string xlabel, string ylabel, int show_graph);
 void make_chart(int k, string out_file, int col_x, int col_y1, int col_y2, int col_y3, string xlabel, string ylabel, string title, int show_graph);
-double max(double a, double b);
+double maxim(double a, double b);
 double mean_col(arma::Mat<double> M, int col);
 double min_col(arma::Mat<double> M, int col);
 double percentile_col(arma::Mat<double> U, double confidence, int col);

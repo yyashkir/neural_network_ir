@@ -42,6 +42,8 @@ double learning_rate;
 int ny;
 clock_t start;
 int flag = 0;
+int audio;
+double max_v = 0;
 // reading data from input files:
 void  read_input_files(char *argv)
 {
@@ -64,6 +66,7 @@ void  read_input_files(char *argv)
 		>> s >> iteration_max_number
 		>> s >> learning_rate
 		>> s >> ny
+		>> s >> audio
 		;
 	infile.close();
 //
@@ -76,7 +79,7 @@ void  read_input_files(char *argv)
 		data_stream >> tenors(k);
 //
 	historical_dataset.set_size(i_hist, kmax);
-	double max_v = 0;
+	
 	for (i = 0; i < i_hist; i++)
 		for (k = 0; k < kmax; k++)
 		{
@@ -84,9 +87,10 @@ void  read_input_files(char *argv)
 			if (max_v < historical_dataset(i, k)) max_v = historical_dataset(i, k);
 		}
 	data_stream.close();
-	/*for (i = 0; i < i_hist; i++)
+	//normalizing to the range of (-0.5 to 0.5):
+	for (i = 0; i < i_hist; i++)
 		for (k = 0; k < kmax; k++)
-			historical_dataset(i, k) = historical_dataset(i, k) / max_v;*/
+			historical_dataset(i, k) = historical_dataset(i, k) / max_v - 0.5;
 
 	cout << "\nHistorical_dataset number of rows: "<< historical_dataset.n_rows <<"  max element is= "<<max_v<<endl;
 //
@@ -124,7 +128,7 @@ void iteration_loop()
 	ERR.fill(0);
 	ofstream a2y;
 	a2y.open("a2y.csv");
-	a2y << "y,a";
+	a2y << "t,y,a";
 	arma::Row <double> x;	//input (hist)
 	arma::Row <double> y;	//output (hist)
 	arma::Mat <double> weight_01;	//weights before hidden layer
@@ -211,7 +215,7 @@ void iteration_loop()
 				a_2all(i, k) = a_2(k);		//memorizing it for i-th sample
 				ERR(it,1) = ERR(it,1) + pow(a_2(k) - y(k), 2) / train_size;	//accumulation of errors
 			}
-
+			
 		// backward propagation:
 			//at output layer:
 			for (k = 0; k < kmax; k++)
@@ -252,20 +256,23 @@ void iteration_loop()
 				a_2(k) = sigmoid(z_12(k));		// out of output layer '2'
 				ERR(it, 2) = ERR(it, 2) + pow(a_2(k) - y(k), 2) / validation_size;	//error accumulation
 			}
-			if (it == it_min + 2 || it == iteration_max_number - 1  && flag == 0)
+			if (it_min + 1 == it || it == iteration_max_number - 1  && flag == 0)
 			{
-				a2y << endl << y(ny) << "," << a_2(ny);
-				if(i==0)a2y << endl << y(ny) << "," << 0;
+				double ry =( y(ny) + 0.5 ) * max_v;	//back from normalized...
+				double ra = (a_2(ny) + 0.5) * max_v;
+				a2y << endl << i << "," << ry << "," << ra;
+				if (i == 0)
+					a2y << endl << i << "," << ry << "," << 0;
 			}
 		}	//validation end
-		
-		if (it > 1 && ERR(it - 2, 2) >= ERR(it - 1, 2) && ERR(it - 1, 2) <= ERR(it, 2) || it == iteration_max_number - 1)
+
+		if (it > 0 && ERR(it, 2) > ERR(it - 1, 2) && flag == 0)
 		{
-			it_min = it - 1;
+			it_min = it;
 			flag = 1;
 		}
 //
-		if ((it / 50) * 50 == it) 	cout <<"							"<< it << "\r";
+		if ((it / 50) * 50 == it) 	cout <<"							"<< it << "	err:" <<ERR(it, 1) << "	val:" << ERR(it, 2) << "\r";
 //
 		// derivatives by weights calculation:
 		for (i = back_range; i < train_size - fwd_range; i++)
@@ -286,15 +293,11 @@ void iteration_loop()
 			{
 				weight_01(k, j) = weight_01(k, j) - learning_rate * w_d01(k, j);
 				weight_12(k, j) = weight_12(k, j) - learning_rate * w_d12(k, j);
-
 			}
 			bias_01(k) = bias_01(k) - learning_rate * beta_01(k);
 			bias_12(k) = bias_12(k) - learning_rate * beta_12(k);
 		}
-		
 	}	//iteration loop end
-	
-	
 	double min_val_err = 1e12;
 	for (it = 1; it < iteration_max_number; it++)
 		if (ERR(it, 2) < min_val_err)
@@ -320,12 +323,10 @@ int main(int argc, char **argv)
 	cout << "Reading input files: ";
 	read_input_files(argv[1]);	
 	iteration_loop();
-	system("play.bat");
+	if(audio == 1)system("play.bat");
 //
-	// errors vs iteration: python code call
-	system("python view_loglog.py");
-	//system("python view_logy.py");
-	system("python a2y.py");
+	// results: python code call
+	system("python view_res.py");
 //
 	return 0;
 }
